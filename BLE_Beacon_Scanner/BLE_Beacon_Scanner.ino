@@ -51,15 +51,23 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
           Serial.printf("iBeacon Frame\n");
           Serial.printf("ID: %04X Major: %d Minor: %d UUID: %s Power: %d\n", oBeacon.getManufacturerId(), ENDIAN_CHANGE_U16(oBeacon.getMajor()), ENDIAN_CHANGE_U16(oBeacon.getMinor()), oBeacon.getProximityUUID().toString().c_str(), oBeacon.getSignalPower());
         }
-        else
+        else if (cManufacturerData[0] == 0xE3 && cManufacturerData[1] == 0x05)
         {
-          Serial.println("Found another manufacturers beacon!");
-          Serial.printf("strManufacturerData: %d ", strManufacturerData.length());
+          Serial.print("Found Element ");
+
+          Serial.printf("RSSI %d ", advertisedDevice.getRSSI());
+          Serial.printf("MAC %s ", advertisedDevice.getAddress().toString().c_str());
+
+          Serial.printf("EM: %d ", strManufacturerData.length());
           for (int i = 0; i < strManufacturerData.length(); i++)
           {
-            Serial.printf("[%X]", cManufacturerData[i]);
+            Serial.printf("[%02X]", cManufacturerData[i]);
           }
           Serial.printf("\n");
+
+        }
+        else
+        {
         }
       }
 
@@ -125,6 +133,9 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 
 void setup()
 {
+  M5.begin();
+  M5.Lcd.println("Elemental BLE Scanner start.");
+
   Serial.begin(115200);
   Serial.println("Scanning...");
 
@@ -133,7 +144,8 @@ void setup()
   pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setActiveScan(true); //active scan uses more power, but get results faster
   pBLEScan->setInterval(100);
-  pBLEScan->setWindow(99); // less or equal setInterval value
+  //pBLEScan->setWindow(99); // less or equal setInterval value
+  pBLEScan->setWindow(20); // less or equal setInterval value
 }
 
 void loop()
