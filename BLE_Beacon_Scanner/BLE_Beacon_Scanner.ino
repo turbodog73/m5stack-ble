@@ -10,9 +10,51 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
-#include <BLEEddystoneURL.h>
-#include <BLEEddystoneTLM.h>
 #include <BLEBeacon.h>
+
+
+void getElementType(uint8_t ElementType)
+{
+  switch (ElementType) {
+    case 2:
+    case 4:
+    case 6:
+      Serial.printf("ET1");
+      break;
+    case 3:
+    case 5:
+    case 7:
+      Serial.printf("EA1");
+      break;
+    case 8:
+      Serial.printf("ET2");
+      break;
+    case 9:
+      Serial.printf("EA2");
+      break;
+    case 19:
+      Serial.printf("EB1");
+      break;
+    case 20:
+      Serial.printf("EU2");
+      break;
+    case 21:
+      Serial.printf("EU3");
+      break;
+    case 22:
+      Serial.printf("ET3");
+      break;
+    case 23:
+      Serial.printf("EB2");
+      break;
+    default:
+      Serial.printf("NA");
+      break;
+    }
+
+  return;
+}
+
 
 int scanTime = 5; //In seconds
 BLEScan *pBLEScan;
@@ -21,21 +63,6 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
 {
     void onResult(BLEAdvertisedDevice advertisedDevice)
     {
-      if (advertisedDevice.haveName())
-      {
-        Serial.print("Device name: ");
-        Serial.println(advertisedDevice.getName().c_str());
-        Serial.println("");
-      }
-
-      if (advertisedDevice.haveServiceUUID())
-      {
-        BLEUUID devUUID = advertisedDevice.getServiceUUID();
-        Serial.print("Found ServiceUUID: ");
-        Serial.println(devUUID.toString().c_str());
-        Serial.println("");
-      }
-
       if (advertisedDevice.haveManufacturerData() == true)
       {
         std::string strManufacturerData = advertisedDevice.getManufacturerData();
@@ -43,91 +70,23 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         uint8_t cManufacturerData[100];
         strManufacturerData.copy((char *)cManufacturerData, strManufacturerData.length(), 0);
 
-        if (strManufacturerData.length() == 25 && cManufacturerData[0] == 0x4C && cManufacturerData[1] == 0x00)
+        if (cManufacturerData[0] == 0xE3 && cManufacturerData[1] == 0x05)
         {
-          Serial.println("Found an iBeacon!");
-          BLEBeacon oBeacon = BLEBeacon();
-          oBeacon.setData(strManufacturerData);
-          Serial.printf("iBeacon Frame\n");
-          Serial.printf("ID: %04X Major: %d Minor: %d UUID: %s Power: %d\n", oBeacon.getManufacturerId(), ENDIAN_CHANGE_U16(oBeacon.getMajor()), ENDIAN_CHANGE_U16(oBeacon.getMinor()), oBeacon.getProximityUUID().toString().c_str(), oBeacon.getSignalPower());
-        }
-        else if (cManufacturerData[0] == 0xE3 && cManufacturerData[1] == 0x05)
-        {
-          Serial.print("Found Element ");
-
           Serial.printf("RSSI %d ", advertisedDevice.getRSSI());
           Serial.printf("MAC %s ", advertisedDevice.getAddress().toString().c_str());
 
           Serial.printf("EM: %d ", strManufacturerData.length());
+
+          getElementType(cManufacturerData[2]);
+
           for (int i = 0; i < strManufacturerData.length(); i++)
           {
             Serial.printf("[%02X]", cManufacturerData[i]);
           }
           Serial.printf("\n");
-
-        }
-        else
-        {
         }
       }
 
-      uint8_t *payLoad = advertisedDevice.getPayload();
-      // search for Eddystone Service Data in the advertising payload
-      // *payload shall point to eddystone data or to its end when not found
-      const uint8_t serviceDataEddystone[3] = {0x16, 0xAA, 0xFE}; // it has Eddystone BLE UUID
-      const size_t payLoadLen = advertisedDevice.getPayloadLength();
-      uint8_t *payLoadEnd = payLoad + payLoadLen - 1; // address of the end of payLoad space
-      while (payLoad < payLoadEnd) {
-        if (payLoad[1] == serviceDataEddystone[0] && payLoad[2] == serviceDataEddystone[1] && payLoad[3] == serviceDataEddystone[2]) {
-          // found!
-          payLoad += 4;
-          break;
-        }
-        payLoad += *payLoad + 1;  // payLoad[0] has the field Length
-      }
-
-      if (payLoad < payLoadEnd) // Eddystone Service Data and respective BLE UUID were found
-      {
-        if (*payLoad == 0x10)
-        {
-          Serial.println("Found an EddystoneURL beacon!");
-          BLEEddystoneURL foundEddyURL = BLEEddystoneURL();
-          uint8_t URLLen = *(payLoad - 4) - 3;  // Get Field Length less 3 bytes (type and UUID)
-          foundEddyURL.setData(std::string((char*)payLoad, URLLen));
-          std::string bareURL = foundEddyURL.getURL();
-          if (bareURL[0] == 0x00)
-          {
-            // dumps all bytes in advertising payload
-            Serial.println("DATA-->");
-            uint8_t *payLoad = advertisedDevice.getPayload();
-            for (int idx = 0; idx < payLoadLen; idx++)
-            {
-              Serial.printf("0x%02X ", payLoad[idx]);
-            }
-            Serial.println("\nInvalid Data");
-            return;
-          }
-
-          Serial.printf("Found URL: %s\n", foundEddyURL.getURL().c_str());
-          Serial.printf("Decoded URL: %s\n", foundEddyURL.getDecodedURL().c_str());
-          Serial.printf("TX power %d\n", foundEddyURL.getPower());
-          Serial.println("\n");
-        }
-        else if (*payLoad == 0x20)
-        {
-          Serial.println("Found an EddystoneTLM beacon!");
-
-          BLEEddystoneTLM eddystoneTLM;
-          eddystoneTLM.setData(std::string((char*)payLoad, 14));
-          Serial.printf("Reported battery voltage: %dmV\n", eddystoneTLM.getVolt());
-          Serial.printf("Reported temperature: %.2f°C (raw data=0x%04X)\n", eddystoneTLM.getTemp(), eddystoneTLM.getRawTemp());
-          Serial.printf("Reported advertise count: %d\n", eddystoneTLM.getCount());
-          Serial.printf("Reported time since last reboot: %ds\n", eddystoneTLM.getTime());
-          Serial.println("\n");
-          Serial.print(eddystoneTLM.toString().c_str());
-          Serial.println("\n");
-        }
-      }
     }
 };
 
